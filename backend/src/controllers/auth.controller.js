@@ -117,7 +117,7 @@ export async function login(req, res) {
   //   res.send("Login Route");
 }
 
-export async function logout(req, res) {
+export function logout(req, res) {
   // clear cookie
   res.cookie("jwt", "", {
     httpOnly: true,
@@ -126,4 +126,79 @@ export async function logout(req, res) {
   res.clearCookie("jwt");
   res.status(200).json({ success: true, message: "Logged out" });
   //   res.send("Logout Route");
+}
+
+export async function onboard(req, res) {
+  try {
+    const {
+      fullName,
+      bio,
+      nativeLanguage,
+      learningLanguage,
+      location,
+      avatar,
+    } = req.body;
+
+    if (
+      !fullName ||
+      !bio ||
+      !nativeLanguage ||
+      !learningLanguage ||
+      !location
+    ) {
+      return res.status(400).json({
+        message: "All fields are required",
+        success: false,
+        missingFields: [
+          !fullName && "fullName",
+          !bio && "bio",
+          !nativeLanguage && "nativeLanguage",
+          !learningLanguage && "learningLanguage",
+          !location && "location",
+        ].filter(Boolean),
+      });
+    }
+
+    const userId = req.user._id;
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      {
+        fullName,
+        bio,
+        nativeLanguage,
+        learningLanguage,
+        location,
+        avatar,
+        isOnboarded: true,
+      },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // TODO: update user for stream as well
+    try {
+      await upsertStreamUser({
+        id: updatedUser._id.toString(),
+        name: updatedUser.fullName,
+        image: updatedUser.avatar || "",
+      });
+
+      console.log(`User updated for Stream ${updatedUser.fullName}`);
+    } catch (error) {
+      console.error("Error updating user for Stream:", error);
+      return res.status(500).json({ message: "Error when update stream user" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "User onboarded successfully",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
 }
